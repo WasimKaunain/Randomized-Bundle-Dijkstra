@@ -1,0 +1,72 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.env/
+.envrc
+.venv/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+.history/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# OS generated files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.swp
+*~
+
+# =========================
+# HPC / cluster outputs
+# =========================
+*.out
+*.err
+*.sbatch
+
+# =========================
+# Data files (optional)
+# =========================
+data/
+datasets/
+*.csv
+*.h5
+*.pt
+*.pth   
+
+# =========================
+# Model checkpoints
+# =========================
+checkpoints/
+models/
+graphs/
+Final_Output/
+slurm/
+Plots/
