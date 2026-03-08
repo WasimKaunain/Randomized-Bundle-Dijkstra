@@ -22,6 +22,7 @@ struct BundleInfo {
     std::vector<char> isR;                // membership flag
 
     std::vector<int> b;                   // bundle representative
+    std::vector<double> dist_to_bv;       // dist_to_bv[v] = dist(v, b(v))
 
     std::vector<std::vector<int>> bundles;  // only meaningful for R vertices
 

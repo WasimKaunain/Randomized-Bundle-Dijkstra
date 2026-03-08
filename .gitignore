@@ -6,6 +6,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
+*.o
 *.egg
 *.egg-info/
 dist/
@@ -70,3 +71,5 @@ graphs/
 Final_Output/
 slurm/
 Plots/
+Docs/
+obj/

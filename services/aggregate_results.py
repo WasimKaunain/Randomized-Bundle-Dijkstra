@@ -7,42 +7,37 @@ OUTPUT_DIR = "./Final_Output"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Column names (based on your C++ output order)
-columns = [
-    "filename", "N", "mcount",
-    "Nt", "Mt", "k", "seed",
-    "dijkstra_ref",
-    "dijkstra_fib",
-    "transform",
-    "bundle_construct",
-    "bundle_dijkstra",
-    "Total_bundle_dijks",
-    "R_size",
-    "sum_ball_sizes",
-    "extracts",
-    "decrease_key",
-    "ref_ok",
-    "fib_ok"
-]
 
 def process_file(filepath):
     print(f"Processing: {filepath}")
 
-    df = pd.read_csv(filepath, header=None)
-    df.columns = columns
+    # Read CSV with header (main.cpp writes header on first run)
+    df = pd.read_csv(filepath)
 
-    # Convert all columns except filename to numeric
-    for col in columns[1:]:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Drop any duplicate header rows that may have been appended
+    df = df[df["Graph"] != "Graph"]
 
-    # Drop possible bad rows (like header rows accidentally read as data)
-    df = df.dropna(subset=["N"])
+    # Convert all columns except Graph to numeric
+    for col in df.columns:
+        if col != "Graph":
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # Group by filename and average
-    averaged = df.groupby("filename", as_index=False).mean()
+    # Drop rows with missing data
+    df = df.dropna(subset=["#Nodes"])
 
-    # Sort by filename
-    averaged = averaged.sort_values("filename")
+    # Group by graph name and average across seeds
+    averaged = df.groupby("Graph", as_index=False).mean(numeric_only=True)
+
+    # Compute total bundle times (construction + main algo) for both versions
+    averaged["Total_Bundle_Set_ms"] = (
+        averaged["Bundle_construct_ms"] + averaged["Bundle_Set_ms"]
+    )
+    averaged["Total_Bundle_Fib_ms"] = (
+        averaged["Bundle_construct_ms"] + averaged["Bundle_Fib_ms"]
+    )
+
+    # Sort by graph name
+    averaged = averaged.sort_values("Graph")
 
     return averaged
 
@@ -53,13 +48,15 @@ def main():
             input_path = os.path.join(INPUT_DIR, file)
 
             averaged_df = process_file(input_path)
-            
+
             output_filename = f"final_{file}"
             output_path = os.path.join(OUTPUT_DIR, output_filename)
 
             averaged_df.to_csv(output_path, index=False)
 
             print(f"Saved: {output_path}")
+            print(averaged_df.to_string(index=False))
+            print()
 
 
 if __name__ == "__main__":

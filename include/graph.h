@@ -21,4 +21,8 @@ struct Graph
         void add_edge(int u, int v, double w);
         static Graph load_edge_list(const std::string &fname); //simple edge list u v w...
     };
+
 Graph constant_degree_transform(const Graph &);
+
+// ADD THIS FUNCTION DECLARATION
+void check_connectivity(const Graph &G, int source);

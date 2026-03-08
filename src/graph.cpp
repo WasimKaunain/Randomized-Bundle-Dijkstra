@@ -5,6 +5,9 @@
 #include <sstream>
 #include <iostream>
 #include <cassert>
+#include <queue>
+#include <limits>
+
 
 void Graph :: add_edge(int u, int v, double w)
     {
@@ -128,4 +131,48 @@ Graph constant_degree_transform(const Graph &G_orig)
         }
     }
     return Gp;
+}
+
+
+void check_connectivity(const Graph &G, int source) {
+    int n = G.adj.size();
+    const double INF = std::numeric_limits<double>::infinity();
+    std::vector<double> dist(n, INF);
+    std::queue<int> q;
+    
+    dist[source] = 0;
+    q.push(source);
+    
+    int reachable = 0;
+    while(!q.empty()) {
+        int u = q.front();
+        q.pop();
+        reachable++;
+        
+        for(auto &e : G.adj[u]) {
+            if(dist[e.to] == INF) {
+                dist[e.to] = dist[u] + 1;
+                q.push(e.to);
+            }
+        }
+    }
+    
+    std::cerr << "Connectivity check: " << reachable << "/" << n 
+              << " vertices reachable from source " << source << "\n";
+    
+    if(reachable < n) {
+        std::cerr << "WARNING: Graph is NOT fully connected!\n";
+        int unreachable_count = 0;
+        std::cerr << "Unreachable vertices: ";
+        for(int i=0; i<std::min(n, 20); ++i) {
+            if(dist[i] == INF) {
+                std::cerr << i << " ";
+                unreachable_count++;
+            }
+        }
+        if(n - reachable > 20) {
+            std::cerr << "... and " << (n - reachable - 20) << " more";
+        }
+        std::cerr << "\n";
+    }
 }

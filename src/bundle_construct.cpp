@@ -2,6 +2,7 @@
 #include <random>
 #include <queue>
 #include <limits>
+#include <iostream>
 
 using PQe = std::pair<double,int>;
 
@@ -15,6 +16,7 @@ BundleInfo BundleConstruction(const Graph &G, int s, int k,
 
     B.isR.assign(N, 0);
     B.b.assign(N, -1);
+    B.dist_to_bv.assign(N, std::numeric_limits<double>::infinity());
 
     B.ball.assign(N, {});
     B.dist_ball.assign(N, {});
@@ -22,7 +24,7 @@ BundleInfo BundleConstruction(const Graph &G, int s, int k,
 
     std::minstd_rand rng(seed);
 
-    // Sample R
+    // Sample R: Independently sample each vertex v ∈ V \ {s} with probability 1/k
     for(int v=0; v<N; ++v){
         if(v==s){
             B.isR[v] = 1;
@@ -36,82 +38,136 @@ BundleInfo BundleConstruction(const Graph &G, int s, int k,
             B.R_list.push_back(v);
     }
 
-    if(P) P->incr("R_size", B.R_list.size());
+    if(P) P->incr("R_size", (long long)B.R_list.size());
 
     const double INF = std::numeric_limits<double>::infinity();
 
-    // For each non-R vertex
+    int processed = 0;
+
+    // For each non-R vertex, compute Ball(v) and b(v).
+    //
+    // Per the paper (Section 3.1):
+    //   Run Dijkstra from v, stop when first R-vertex is extracted.
+    //   That R-vertex is b(v). All non-R vertices extracted before it
+    //   (except v itself) form Ball(v).
+    //   dist(v, b(v)) is stored in dist_to_bv[v].
+    //
+    // Optimization: allocate dist[] once, filled with INF. After each
+    // truncated Dijkstra, reset only the O(k) entries we touched.
+    // This avoids O(N) re-initialization per vertex.
+    std::vector<double> dist(N, INF);
+    std::vector<int>    touched;          // indices we modified in dist[]
+    touched.reserve(256);
+
     for(int v=0; v<N; ++v)
     {
         if(B.isR[v]){
             B.b[v] = v;
+            B.dist_to_bv[v] = 0.0;
             continue;
         }
 
-        std::vector<double> dist(N, INF);
-        std::vector<char> visited(N, 0);
+        processed++;
+
+        // Seed source vertex
+        dist[v] = 0.0;
+        touched.push_back(v);
 
         std::priority_queue<PQe, std::vector<PQe>, std::greater<PQe>> pq;
+        pq.push({0.0, v});
 
-        dist[v] = 0;
-        pq.push({0, v});
+        int bv = -1;
+        double bv_dist = INF;
 
-        std::vector<int> extracted;
+        std::vector<int>    ball_verts;
+        std::vector<double> ball_dists;
 
         while(!pq.empty())
         {
-            auto [d,x] = pq.top(); pq.pop();
-            if(visited[x]) continue;
-            visited[x] = 1;
+            auto [d, x] = pq.top(); pq.pop();
 
-            extracted.push_back(x);
+            // Skip stale entries
+            if(d > dist[x]) continue;
 
-            if(B.isR[x]) break;
+            // First R vertex extracted => this is b(v), stop
+            if(B.isR[x]){
+                bv = x;
+                bv_dist = d;
+                break;
+            }
+
+            // x is non-R and closer than any R vertex => x ∈ Ball(v)
+            if(x != v){
+                ball_verts.push_back(x);
+                ball_dists.push_back(d);
+            }
 
             for(auto &e : G.adj[x]){
                 int y = e.to;
                 double nd = d + e.weight;
                 if(nd < dist[y]){
+                    if(dist[y] == INF){
+                        touched.push_back(y);   // first time touching y
+                    }
                     dist[y] = nd;
-                    pq.push({nd,y});
+                    pq.push({nd, y});
                 }
             }
         }
 
-        // find nearest R
-        int bv = -1;
-        for(int x : extracted){
-            if(B.isR[x]){
-                bv = x;
-                break;
-            }
+        // Reset only the entries we touched — O(|touched|) = O(k) on average
+        for(int idx : touched){
+            dist[idx] = INF;
         }
+        touched.clear();
 
-        if(bv == -1)
-            bv = extracted.back();
+        // Fallback (disconnected graph — should not happen)
+        if(bv == -1){
+            bv = B.R_list[0];
+            bv_dist = INF;
+            std::cerr << "WARNING: Vertex " << v
+                      << " cannot reach any R vertex!\n";
+        }
 
         B.b[v] = bv;
+        B.dist_to_bv[v] = bv_dist;
+        B.ball[v]      = std::move(ball_verts);
+        B.dist_ball[v] = std::move(ball_dists);
 
-        double threshold = dist[bv];
-
-        for(int x : extracted){
-            if(x==bv) continue;
-            if(dist[x] < threshold){
-                B.ball[v].push_back(x);
-                B.dist_ball[v].push_back(dist[x]);
-            }
+        if(processed % 50000 == 0){
+            std::cerr << "  Processed " << processed << " non-R vertices\n";
         }
-
-        // include b(v) at end
-        B.ball[v].push_back(bv);
-        B.dist_ball[v].push_back(dist[bv]);
     }
 
-    // Build bundles
+    std::cerr << "Bundle construction: processed " << processed << " non-R vertices, "
+              << "R_size=" << B.R_list.size() << "\n";
+
+    // Build bundles: Bundle(u) = {v : b(v) == u}
+    long long total_bundle_size = 0;
     for(int v=0; v<N; ++v){
         int bv = B.b[v];
-        B.bundles[bv].push_back(v);
+        if(bv != v){
+            if(bv < 0 || bv >= N){
+                std::cerr << "ERROR: Vertex " << v << " has invalid b(v)=" << bv << "\n";
+            } else {
+                B.bundles[bv].push_back(v);
+                total_bundle_size++;
+            }
+        }
     }
+
+    std::cerr << "Total vertices in bundles: " << total_bundle_size << "\n";
+
+    // Sanity check
+    long long total_ball_size = 0;
+    for(int v=0; v<N; ++v){
+        if(!B.isR[v]){
+            total_ball_size += B.ball[v].size();
+        }
+    }
+    std::cerr << "Total Ball vertices: " << total_ball_size << "\n";
+
+    if(P) P->incr("sum_ball_sizes", total_ball_size);
 
     return B;
 }

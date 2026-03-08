@@ -105,8 +105,13 @@ int main(int argc, char** argv){
         Mt = mcount;
         std::cerr << "Transformation skipped\n";
     }
+    
+    // ADD THIS - Check if graph is connected
+    std::cerr << "\n";
+    check_connectivity(Gp, source);
+    std::cerr << "\n";
 
-    /* ---------------------------------------------------- */
+        /* ---------------------------------------------------- */
     /* Bundle Construction                                  */
     /* ---------------------------------------------------- */
 
@@ -114,12 +119,25 @@ int main(int argc, char** argv){
     BundleInfo Binfo = BundleConstruction(Gp, source, k, &P, seed);
     P.stop("bundle_construct");
 
-    P.incr("R_size", (long long)Binfo.R_list.size());
-
-    long long sumBalls = 0;
-    for(const auto &vec : Binfo.ball)
-        sumBalls += vec.size();
-    P.incr("sum_ball_sizes", sumBalls);
+    // ADD DIAGNOSTIC CHECKS
+    std::cerr << "\n=== Bundle Diagnostics ===\n";
+    std::cerr << "Source vertex: " << source << "\n";
+    std::cerr << "Source in R: " << (Binfo.isR[source] ? "YES" : "NO") << "\n";
+    std::cerr << "b[source] = " << Binfo.b[source] << "\n";
+    std::cerr << "R_list size: " << Binfo.R_list.size() << "\n";
+    
+    // Check first few vertices
+    std::cerr << "\nFirst 5 non-R vertices:\n";
+    int count = 0;
+    for(int v=0; v<std::min(Nt, 10); ++v){
+        if(!Binfo.isR[v]){
+            std::cerr << "  v=" << v << " b(v)=" << Binfo.b[v] 
+                      << " ball_size=" << Binfo.ball[v].size() << "\n";
+            count++;
+            if(count >= 5) break;
+        }
+    }
+    std::cerr << "===========================\n\n";
 
     /* ---------------------------------------------------- */
     /* Bundle Dijkstra (Set version)                        */
