@@ -1,87 +1,84 @@
 import os
 import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+plt.rcParams.update({
+    'font.family': 'serif',
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+})
 
-# -----------------------------
-# Setup Paths 
-# -----------------------------
-
+# Setup
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 csv_path = os.path.join(base_dir, "Final_Output", "final_sparse_results.csv")
 plot_dir = os.path.join(base_dir, "Plots", "sparse")
-
 os.makedirs(plot_dir, exist_ok=True)
 
-# -----------------------------
-# Load Data
-# -----------------------------
-
+# Load and prepare data
 df = pd.read_csv(csv_path)
+df = df.sort_values("#Nodes")
 
-# Sort by number of vertices
-df = df.sort_values(by="N")
+# Filter out rows where times are 0 (too small to measure)
+mask = (df["Ref_ms"] > 0) & (df["Total_Bundle_Set_ms"] > 0)
+df = df[mask].reset_index(drop=True)
+N = df["#Nodes"]
 
-# -----------------------------
-# Plot 1: Runtime Comparison
-# -----------------------------
+# X-axis: 2^x labels for sparse graph vertex counts
+def pow2_formatter(x, pos):
+    exp = int(round(np.log2(x)))
+    return r'$2^{%d}$' % exp
 
-plt.figure()
+# Tick positions: only at the exact 2^x values present in data
+tick_positions = sorted(N.unique())
 
-plt.plot(df["N"], df["dijkstra_ref"], marker='o', label="Binary Heap")
-plt.plot(df["N"], df["dijkstra_fib"], marker='o', label="Fibonacci Heap")
-plt.plot(df["N"], df["Total_bundle_dijks"], marker='o', label="Bundle SSSP")
+# -------------------------------------------------------
+# Plot 1: Total runtime log-log with 2^x X-axis
+# -------------------------------------------------------
+fig, ax = plt.subplots(figsize=(8, 5))
 
-plt.xlabel("Number of Vertices (N)")
-plt.ylabel("Time (ms)")
-plt.title("Sparse Graphs: Runtime Comparison")
-plt.legend()
-plt.xscale("log")
+ax.plot(N, df["Ref_ms"],              'o-',  color='#1565C0', lw=1.6, ms=5, label='Classical Dijkstra')
+ax.plot(N, df["Total_Bundle_Set_ms"], 's-',  color='#C62828', lw=1.6, ms=5, label='Bundle Dijkstra (Set)')
+ax.plot(N, df["Total_Bundle_Fib_ms"], '^--', color='#2E7D32', lw=1.6, ms=5, label='Bundle Dijkstra (Fib)')
 
-output_path = os.path.join(plot_dir, "sparse_runtime_comparison.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
+ax.set_xscale('log', base=2)
+ax.set_yscale('log')
+ax.set_xticks(tick_positions)
+ax.xaxis.set_major_formatter(FuncFormatter(pow2_formatter))
+ax.tick_params(axis='x', rotation=45, labelsize=9)
+ax.set_xlabel("Number of Vertices", fontsize=11)
+ax.set_ylabel("Total Execution Time (ms)", fontsize=11)
+ax.set_title("Sparse Random Graphs — Runtime Comparison", fontsize=12)
+ax.legend(fontsize=9)
+ax.grid(True, which='major', ls='-', alpha=0.25)
 
-# -----------------------------
-# Plot 2: Fibonacci / Binary Ratio
-# -----------------------------
+fig.tight_layout()
+fig.savefig(os.path.join(plot_dir, "sparse_runtime_loglog.png"), dpi=300)
+plt.close(fig)
 
-ratio = df["dijkstra_fib"] / df["dijkstra_ref"]
+# -------------------------------------------------------
+# Plot 2: Dijkstra-phase only (Set vs Fib)
+# -------------------------------------------------------
+fig, ax = plt.subplots(figsize=(8, 5))
 
-plt.figure()
+ax.plot(N, df["Bundle_Set_ms"], 's-',  color='#C62828', lw=1.6, ms=5, label='Bundle Dijkstra Phase (Set)')
+ax.plot(N, df["Bundle_Fib_ms"], '^--', color='#2E7D32', lw=1.6, ms=5, label='Bundle Dijkstra Phase (Fib)')
 
-plt.plot(df["N"], ratio, marker='o')
+ax.set_xscale('log', base=2)
+ax.set_yscale('log')
+ax.set_xticks(tick_positions)
+ax.xaxis.set_major_formatter(FuncFormatter(pow2_formatter))
+ax.tick_params(axis='x', rotation=45, labelsize=9)
+ax.set_xlabel("Number of Vertices", fontsize=11)
+ax.set_ylabel("Dijkstra Phase Only (ms)", fontsize=11)
+ax.set_title("Sparse Graphs — Set vs Fibonacci (Dijkstra Phase)", fontsize=12)
+ax.legend(fontsize=9)
+ax.grid(True, which='major', ls='-', alpha=0.25)
 
-plt.xlabel("Number of Vertices (N)")
-plt.ylabel("Fib / Binary Time Ratio")
-plt.title("Sparse Graphs: Fibonacci vs Binary Ratio")
-plt.xscale("log")
+fig.tight_layout()
+fig.savefig(os.path.join(plot_dir, "sparse_dijkstra_phase.png"), dpi=300)
+plt.close(fig)
 
-output_path = os.path.join(plot_dir, "sparse_fib_binary_ratio.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
-
-# -----------------------------
-# Plot 3: Bundle Time Breakdown
-# -----------------------------
-
-plt.figure()
-
-plt.plot(df["N"], df["bundle_construct"], marker='o', label="Bundle Construct")
-plt.plot(df["N"], df["bundle_dijkstra"], marker='o', label="Bundle Dijkstra")
-
-# Include transform only if column exists (ER graphs may have it)
-if "transform" in df.columns:
-    plt.plot(df["N"], df["transform"], marker='o', label="Transform")
-
-plt.xlabel("Number of Vertices (N)")
-plt.ylabel("Time (ms)")
-plt.title("Sparse Graphs: Bundle Time Breakdown")
-plt.legend()
-plt.xscale("log")
-
-output_path = os.path.join(plot_dir, "sparse_bundle_breakdown.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
-
-print("Sparse plots generated successfully.")
+print("Sparse plots generated: sparse_runtime_loglog.png, sparse_dijkstra_phase.png")

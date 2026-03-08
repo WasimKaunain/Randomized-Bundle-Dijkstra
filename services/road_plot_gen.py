@@ -1,82 +1,66 @@
 import os
 import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+plt.rcParams.update({
+    'font.family': 'serif',
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+})
 
-# -----------------------------
-# Setup Paths 
-# -----------------------------
-
+# Setup
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 csv_path = os.path.join(base_dir, "Final_Output", "final_road_results.csv")
 plot_dir = os.path.join(base_dir, "Plots", "road")
-
 os.makedirs(plot_dir, exist_ok=True)
 
-# -----------------------------
-# Load Data
-# -----------------------------
-
+# Load and prepare data
 df = pd.read_csv(csv_path)
+df = df.sort_values("#Nodes")
 
-df = df.sort_values(by="N")
+N = df["#Nodes"]
 
-# -----------------------------
-# Plot 1: Runtime Comparison
-# -----------------------------
+# -------------------------------------------------------
+# Plot 1: Total runtime log-log
+# -------------------------------------------------------
+fig, ax = plt.subplots(figsize=(7, 5))
 
-plt.figure()
+ax.plot(N, df["Ref_ms"],              'o-',  color='#1565C0', lw=1.6, ms=5, label='Classical Dijkstra')
+ax.plot(N, df["Total_Bundle_Set_ms"], 's-',  color='#C62828', lw=1.6, ms=5, label='Bundle Dijkstra (Set)')
+ax.plot(N, df["Total_Bundle_Fib_ms"], '^--', color='#2E7D32', lw=1.6, ms=5, label='Bundle Dijkstra (Fib)')
 
-plt.plot(df["N"], df["dijkstra_ref"], marker='o', label="Binary Heap")
-plt.plot(df["N"], df["dijkstra_fib"], marker='o', label="Fibonacci Heap")
-plt.plot(df["N"], df["Total_bundle_dijks"], marker='o', label="Bundle SSSP")
+ax.set_xscale('log'); ax.set_yscale('log')
+ax.set_xlabel("Number of Vertices", fontsize=11)
+ax.set_ylabel("Total Execution Time (ms)", fontsize=11)
+ax.set_title("DIMACS Road Networks — Runtime Comparison", fontsize=12)
+ax.legend(fontsize=9)
+ax.grid(True, which='major', ls='-', alpha=0.25)
+ax.grid(True, which='minor', ls=':', alpha=0.15)
 
-plt.xlabel("Number of Vertices (N)")
-plt.ylabel("Time (ms)")
-plt.title("Road Graphs: Runtime Comparison")
-plt.legend()
-plt.xscale("log")
+fig.tight_layout()
+fig.savefig(os.path.join(plot_dir, "road_runtime_loglog.png"), dpi=300)
+plt.close(fig)
 
-plt.savefig(os.path.join(plot_dir, "road_runtime_comparison.png"), dpi=300)
-plt.close()
+# -------------------------------------------------------
+# Plot 2: Dijkstra-phase only (Set vs Fib)
+# -------------------------------------------------------
+fig, ax = plt.subplots(figsize=(7, 5))
 
-# -----------------------------
-# Plot 2: Fibonacci / Binary Ratio
-# -----------------------------
+ax.plot(N, df["Bundle_Set_ms"], 's-',  color='#C62828', lw=1.6, ms=5, label='Bundle Dijkstra Phase (Set)')
+ax.plot(N, df["Bundle_Fib_ms"], '^--', color='#2E7D32', lw=1.6, ms=5, label='Bundle Dijkstra Phase (Fib)')
 
-ratio = df["dijkstra_fib"] / df["dijkstra_ref"]
+ax.set_xscale('log'); ax.set_yscale('log')
+ax.set_xlabel("Number of Vertices", fontsize=11)
+ax.set_ylabel("Dijkstra Phase Only (ms)", fontsize=11)
+ax.set_title("Road Networks — Set vs Fibonacci (Dijkstra Phase)", fontsize=12)
+ax.legend(fontsize=9)
+ax.grid(True, which='major', ls='-', alpha=0.25)
+ax.grid(True, which='minor', ls=':', alpha=0.15)
 
-plt.figure()
+fig.tight_layout()
+fig.savefig(os.path.join(plot_dir, "road_dijkstra_phase.png"), dpi=300)
+plt.close(fig)
 
-plt.plot(df["N"], ratio, marker='o')
-
-plt.xlabel("Number of Vertices (N)")
-plt.ylabel("Fib / Binary Time Ratio")
-plt.title("Road Graphs: Fibonacci vs Binary Ratio")
-plt.xscale("log")
-
-plt.savefig(os.path.join(plot_dir, "road_fib_binary_ratio.png"), dpi=300)
-plt.close()
-
-# -----------------------------
-# Plot 3: Bundle Time Breakdown
-# -----------------------------
-
-plt.figure()
-
-plt.plot(df["N"], df["bundle_construct"], marker='o', label="Bundle Construct")
-plt.plot(df["N"], df["bundle_dijkstra"], marker='o', label="Bundle Dijkstra")
-
-if "transform" in df.columns:
-    plt.plot(df["N"], df["transform"], marker='o', label="Transform")
-
-plt.xlabel("Number of Vertices (N)")
-plt.ylabel("Time (ms)")
-plt.title("Road Graphs: Bundle Time Breakdown")
-plt.legend()
-plt.xscale("log")
-
-plt.savefig(os.path.join(plot_dir, "road_bundle_breakdown.png"), dpi=300)
-plt.close()
-
-print("Road plots generated successfully.")
+print("Road plots generated: road_runtime_loglog.png, road_dijkstra_phase.png")

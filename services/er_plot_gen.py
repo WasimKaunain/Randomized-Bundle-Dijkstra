@@ -1,108 +1,74 @@
 import os
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+plt.rcParams.update({
+    'font.family': 'serif',
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+})
 
-#BASE DiRECTORY
+# Setup
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-#CSV PATH
 csv_path = os.path.join(base_dir, "Final_Output", "final_er_results.csv")
-
-#PLOT OUTPUT DIRECTORY
 plot_dir = os.path.join(base_dir, "Plots", "er")
-
 os.makedirs(plot_dir, exist_ok=True)
 
-
-# Load ER CSV
+# Load and prepare data
 df = pd.read_csv(csv_path)
+df = df.sort_values("#Nodes")
 
-# Sort by N
-df = df.sort_values("N")
+# For ER graphs: multiple edge densities per N.
+# Group by #Nodes and take mean to get one point per N for cleaner plots.
+grouped = df.groupby("#Nodes", as_index=False).mean(numeric_only=True)
 
-# Extract columns
-N = df["N"]
-binary = df["dijkstra_ref"]
-fib = df["dijkstra_fib"]
-bundle = df["Total_bundle_dijks"]
+# Filter out rows where times are 0 (too small to measure)
+mask = (grouped["Ref_ms"] > 0) & (grouped["Total_Bundle_Set_ms"] > 0)
+g = grouped[mask].reset_index(drop=True)
+N = g["#Nodes"]
 
-# -------------------------------
-# 1. Log-Log Runtime Plot
-# -------------------------------
-plt.figure()
-plt.loglog(N, binary, marker='o')
-plt.loglog(N, fib, marker='o')
-plt.loglog(N, bundle, marker='o')
-plt.xlabel("Number of vertices (N)")
-plt.ylabel("Execution Time (ms)")
-plt.title("ER Graphs: Runtime Comparison (Log-Log)")
-plt.legend(["Binary Heap", "Fibonacci Heap", "Bundle"])
-output_path = os.path.join(plot_dir, "er_runtime_loglog.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
+# -------------------------------------------------------
+# Plot 1: Total runtime (Construction + Dijkstra) log-log
+# -------------------------------------------------------
+fig, ax = plt.subplots(figsize=(7, 5))
 
-# -------------------------------
-# 2. Ratio Plot
-# -------------------------------
-ratio_binary = bundle / binary
-ratio_fib = bundle / fib
+ax.plot(N, g["Ref_ms"],              'o-',  color='#1565C0', lw=1.6, ms=5, label='Classical Dijkstra')
+ax.plot(N, g["Total_Bundle_Set_ms"], 's-',  color='#C62828', lw=1.6, ms=5, label='Bundle Dijkstra (Set)')
+ax.plot(N, g["Total_Bundle_Fib_ms"], '^--', color='#2E7D32', lw=1.6, ms=5, label='Bundle Dijkstra (Fib)')
 
-plt.figure()
-plt.plot(N, ratio_binary, marker='o')
-plt.plot(N, ratio_fib, marker='o')
-plt.xscale("log")
-plt.xlabel("Number of vertices (N)")
-plt.ylabel("Time Ratio")
-plt.title("ER Graphs: Bundle / Classical Ratio")
-plt.legend(["Bundle / Binary", "Bundle / Fibonacci"])
-output_path = os.path.join(plot_dir, "er_ratio_plot.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
+ax.set_xscale('log'); ax.set_yscale('log')
+ax.set_xlabel("Number of Vertices", fontsize=11)
+ax.set_ylabel("Total Execution Time (ms)", fontsize=11)
+ax.set_title("Erdős–Rényi Graphs — Runtime Comparison", fontsize=12)
+ax.legend(fontsize=9)
+ax.grid(True, which='major', ls='-', alpha=0.25)
+ax.grid(True, which='minor', ls=':', alpha=0.15)
 
+fig.tight_layout()
+fig.savefig(os.path.join(plot_dir, "er_runtime_loglog.png"), dpi=300)
+plt.close(fig)
 
-# -------------------------------
-# 3. Bundle Time Breakdown
-# -------------------------------
-transform = df["transform"]
-construct = df["bundle_construct"]
-bd = df["bundle_dijkstra"]
+# -------------------------------------------------------
+# Plot 2: Dijkstra-phase only (Set vs Fib, without
+#          construction cost which is shared and dominant)
+# -------------------------------------------------------
+fig, ax = plt.subplots(figsize=(7, 5))
 
-plt.figure()
-plt.stackplot(N, transform, construct, bd)
-plt.xscale("log")
-plt.xlabel("Number of vertices (N)")
-plt.ylabel("Time (ms)")
-plt.title("ER Graphs: Bundle Time Breakdown")
-plt.legend(["Transform", "Construct", "Bundle Dijkstra"])
-output_path = os.path.join(plot_dir, "er_bundle_breakdown.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
+ax.plot(N, g["Bundle_Set_ms"], 's-',  color='#C62828', lw=1.6, ms=5, label='Bundle Dijkstra Phase (Set)')
+ax.plot(N, g["Bundle_Fib_ms"], '^--', color='#2E7D32', lw=1.6, ms=5, label='Bundle Dijkstra Phase (Fib)')
 
-# -------------------------------
-# 4. Extract Operations
-# -------------------------------
-plt.figure()
-plt.plot(N, df["extracts"], marker='o')
-plt.xscale("log")
-plt.xlabel("Number of vertices (N)")
-plt.ylabel("Extract Operations")
-plt.title("ER Graphs: Extract Operations Growth")
-output_path = os.path.join(plot_dir, "er_extracts.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
+ax.set_xscale('log'); ax.set_yscale('log')
+ax.set_xlabel("Number of Vertices", fontsize=11)
+ax.set_ylabel("Dijkstra Phase Only (ms)", fontsize=11)
+ax.set_title("ER Graphs — Set vs Fibonacci (Dijkstra Phase)", fontsize=12)
+ax.legend(fontsize=9)
+ax.grid(True, which='major', ls='-', alpha=0.25)
+ax.grid(True, which='minor', ls=':', alpha=0.15)
 
-# -------------------------------
-# 5. Decrease-Key Operations
-# -------------------------------
-plt.figure()
-plt.plot(N, df["decrease_key"], marker='o')
-plt.xscale("log")
-plt.xlabel("Number of vertices (N)")
-plt.ylabel("Decrease-Key Operations")
-plt.title("ER Graphs: Decrease-Key Growth")
-output_path = os.path.join(plot_dir, "er_decrease_key.png")
-plt.savefig(output_path, dpi=300)
-plt.close()
+fig.tight_layout()
+fig.savefig(os.path.join(plot_dir, "er_dijkstra_phase.png"), dpi=300)
+plt.close(fig)
 
-print("ER plots generated successfully.")
+print("ER plots generated: er_runtime_loglog.png, er_dijkstra_phase.png")
