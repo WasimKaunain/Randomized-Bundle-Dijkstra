@@ -69,7 +69,6 @@ checkpoints/
 models/
 graphs/
 Final_Output/
-slurm/
 Plots/
 Docs/
 obj/

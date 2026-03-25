@@ -24,5 +24,4 @@ struct Graph
 
 Graph constant_degree_transform(const Graph &);
 
-// ADD THIS FUNCTION DECLARATION
 void check_connectivity(const Graph &G, int source);

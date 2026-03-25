@@ -1,5 +1,5 @@
 CXX := g++
-CXXFLAGS := -O0 -g  -std=c++17 -march=native -Wall -Wextra
+CXXFLAGS := -O2 -g  -std=c++17 -march=native -Wall -Wextra
 INCLUDES := -Iinclude -I$(HOME)/boost_1_84_0
 
 SRC_DIR := src

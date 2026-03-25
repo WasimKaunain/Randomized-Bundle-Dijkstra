@@ -1,197 +1,136 @@
 #include "bundle_dijkstra.h"
 #include <limits>
 #include <set>
-#include <functional>
-#include <iostream>
 
 /*
- * Bundle Dijkstra — Set-based (Algorithm 2 from the paper)
+ * Bundle Dijkstra — Set-based priority queue  (Algorithm 2 from the paper)
  *
- * Key ideas:
- *   - Only R-vertices are inserted into the priority queue.
- *   - When R-vertex u is extracted (settled), we process Bundle(u):
- *       STEP 1: Relax each v ∈ Bundle(u) using:
- *         (a) d[u] + dist(v, u)            [u = b(v), direct via ball path]
- *         (b) d[y] + dist(v, y)            [y ∈ Ball(v), already settled]
- *         (c) d[z1] + w(z1,z2) + dist(v,z2) [z2 ∈ Ball(v), z1 neighbor of z2]
- *       STEP 2: Relax outgoing neighbors of all bundle members:
- *         For each x ∈ Bundle(u) ∪ {u}, each edge (x,y):
- *           relax y, and relax Ball(y) members via y.
+ * Only R-vertices live in the priority queue.
  *
- *   - Ball(v) does NOT contain b(v). We store dist(v, b(v)) separately:
- *     it's the distance from v to its closest R vertex, computed during
- *     bundle construction. We store it in a dedicated field dist_to_bv[v].
+ * When R-vertex u is extracted with distance d[u]:
  *
- *   - For undirected graphs, dist(v, w) = dist(w, v), so Ball distances
- *     from the construction phase (computed as Dijkstra from v) can be
- *     used in both directions.
+ *   STEP 1 — for every v ∈ Bundle(u):
+ *     (a) d[v] = min(d[v], d[u] + dist_to_bv[v])              // u = b(v)
+ *     (b) for y ∈ Ball(v): d[v] = min(d[v], d[y]+dist(v,y))
+ *     (c) for y ∈ Ball(v), for z ∈ N(y): d[v] = min(d[v], d[z]+w(z,y)+dist(v,y))
+ *     (d) d[b(v)] = min(d[b(v)], d[v] + dist_to_bv[v])        // propagate back
  *
- *   - The "decrease_key" for non-R vertex v propagates to b(v):
- *     if d[v] + dist(v, b(v)) < d[b(v)], update b(v) in the heap.
+ *   STEP 2 — for every x ∈ Bundle(u) ∪ {u}, for every (x,y,w) ∈ E:
+ *     d[y] = min(d[y], d[x] + w)
+ *     for z ∈ Ball(y): d[z] = min(d[z], d[x] + w + dist(y,z))
+ *
+ * decrease_key for non-R vertices: just update d[v].
+ * decrease_key for R vertices: update d[v] and the set-based heap.
  */
 
 std::vector<double> BundleDijkstra(const Graph &G, int s,
-                                    const BundleInfo &B, Profiler *P)
+                                    const BundleInfo &B, Profiler * /*P*/)
 {
     int N = G.adj.size();
     const double INF = std::numeric_limits<double>::infinity();
 
     std::vector<double> d(N, INF);
+    d[s] = 0.0;
 
-    // Set-based heap (distance, vertex) — only R-vertices
+    // Set-based min-heap — only R-vertices
     std::set<std::pair<double,int>> Hset;
 
-    // Iterator map for O(log n) decrease-key on R-vertices
     std::vector<std::set<std::pair<double,int>>::iterator> heap_it(N);
     std::vector<char> in_heap(N, 0);
 
-    d[s] = 0.0;
-
-    // Insert only R vertices into heap
     for(int r : B.R_list){
-        double key = (r == s) ? 0.0 : INF;
-        d[r] = key;
-        heap_it[r] = Hset.insert({key, r}).first;
+        auto it = Hset.insert({d[r], r}).first;
+        heap_it[r] = it;
         in_heap[r] = 1;
     }
 
-    // Helper: relax a vertex, propagating to b(v) if non-R
-    auto do_relax = [&](int v, double newDist) -> void {
-        if(newDist >= d[v]) return;
+    // decrease_key: always update d[v]; if v is R, update heap
+    auto dk = [&](int v, double nd){
+        if(nd >= d[v]) return;
 
-        d[v] = newDist;
+        d[v] = nd;
 
         if(B.isR[v]){
-            // Update R-vertex in the heap
-            if(in_heap[v]){
+            if(in_heap[v])
                 Hset.erase(heap_it[v]);
-            }
-            heap_it[v] = Hset.insert({newDist, v}).first;
+            heap_it[v] = Hset.insert({nd, v}).first;
             in_heap[v] = 1;
-            if(P) P->incr("decrease_key");
-        }
-    };
-
-    // Recursive relax: for non-R vertex, also propagate to b(v)
-    std::function<void(int, double)> relax = [&](int v, double newDist){
-        if(newDist >= d[v]) return;
-
-        do_relax(v, newDist);
-
-        if(!B.isR[v]){
-            // Propagate to b(v): dist(s, b(v)) <= dist(s, v) + dist(v, b(v))
-            // dist(v, b(v)) was precomputed during bundle construction.
-            int bv = B.b[v];
-            if(bv >= 0 && bv < N && bv != v){
-                double dist_v_bv = B.dist_to_bv[v];
-                if(dist_v_bv < INF){
-                    double candidate = d[v] + dist_v_bv;
-                    if(candidate < d[bv]){
-                        do_relax(bv, candidate);
-                    }
-                }
-            }
         }
     };
 
     while(!Hset.empty())
     {
-        auto [du, u] = *Hset.begin();
-        Hset.erase(Hset.begin());
+        auto it = Hset.begin();
+        auto [du, u] = *it;
+        Hset.erase(it);
         in_heap[u] = 0;
 
-        if(P) P->incr("extracts");
-
-        // Skip stale entries
-        if(du > d[u]) continue;
-
-        // ===============================
-        // STEP 1: Process Bundle(u)
-        // For each v in Bundle(u), try to set d[v]
-        // ===============================
+        /* =========================================== */
+        /*  STEP 1: Process Bundle(u)                  */
+        /* =========================================== */
         for(int v : B.bundles[u])
         {
-            if(v < 0 || v >= N) continue;
+            // (a) d[v] via b(v) = u
+            dk(v, d[u] + B.dist_to_bv[v]);
 
-            // (a) Relax v via u: d[v] = d[u] + dist(v, b(v))
-            //     u = b(v), dist(v, u) = dist_to_bv[v] (precomputed)
-            {
-                double dist_vu = B.dist_to_bv[v];
-                if(dist_vu < INF){
-                    relax(v, d[u] + dist_vu);
-                }
-            }
-
-            // (b) Relax v via Ball(v) members: d[v] = d[y] + dist(y, v) for y ∈ Ball(v)
-            //     dist(y, v) = dist(v, y) = dist_ball[v][i] (undirected)
+            // (b) d[v] via Ball(v) members y whose d[y] is already known
             for(size_t i = 0; i < B.ball[v].size(); ++i){
                 int y = B.ball[v][i];
-                double dist_vy = B.dist_ball[v][i];
-                if(y >= 0 && y < N && d[y] < INF){
-                    relax(v, d[y] + dist_vy);
-                }
+                if(d[y] < INF)
+                    dk(v, d[y] + B.dist_ball[v][i]);
             }
 
-            // (c) Relax v via z1 -> z2 -> v: d[z1] + w(z1,z2) + dist(z2, v)
-            //     for z2 ∈ Ball(v), z1 neighbor of z2
+            // (c) d[v] via one-hop: z → y where y ∈ Ball(v), z is any neighbor of y
             for(size_t i = 0; i < B.ball[v].size(); ++i){
-                int z2 = B.ball[v][i];
-                if(z2 < 0 || z2 >= N) continue;
-                double dist_z2v = B.dist_ball[v][i];
+                int y = B.ball[v][i];
+                double dist_yv = B.dist_ball[v][i];
 
-                for(auto &e : G.adj[z2]){
-                    int z1 = e.to;
-                    if(z1 >= 0 && z1 < N && d[z1] < INF){
-                        relax(v, d[z1] + e.weight + dist_z2v);
-                    }
+                for(auto &e : G.adj[y]){
+                    int z = e.to;
+                    if(d[z] < INF)
+                        dk(v, d[z] + e.weight + dist_yv);
                 }
             }
+
+            // (d) Propagate back: d[b(v)] via v
+            //     b(v) = u, so update d[u]
+            dk(u, d[v] + B.dist_to_bv[v]);
         }
 
-        // ===============================
-        // STEP 2: Relax outgoing neighbors of u and its bundle
-        // ===============================
-
-        // Process u itself
-        for(auto &e : G.adj[u]){
-            int y = e.to;
-            if(y < 0 || y >= N) continue;
-            relax(y, d[u] + e.weight);
-
-            // Also relax Ball(y) members via y
-            for(size_t i = 0; i < B.ball[y].size(); ++i){
-                int z = B.ball[y][i];
-                if(z >= 0 && z < N){
-                    double dist_yz = B.dist_ball[y][i];
-                    relax(z, d[u] + e.weight + dist_yz);
-                }
-            }
-        }
-
-        // Process bundle members of u
-        for(int x : B.bundles[u])
-        {
-            if(x < 0 || x >= N) continue;
-            if(d[x] >= INF) continue;  // x not yet reached
-
-            for(auto &e : G.adj[x])
-            {
+        /* =========================================== */
+        /*  STEP 2: Relax neighbors of Bundle(u) ∪ {u} */
+        /* =========================================== */
+        // For every x ∈ Bundle(u) ∪ {u}, relax x's neighbors y and
+        // Ball(y) members z.  When any non-R vertex's distance improves,
+        // propagate back to its bundle leader.
+        auto relax_from = [&](int x){
+            for(auto &e : G.adj[x]){
                 int y = e.to;
-                if(y < 0 || y >= N) continue;
+                double w = e.weight;
 
-                // Relax y via x
-                relax(y, d[x] + e.weight);
+                double old_dy = d[y];
+                dk(y, d[x] + w);
 
-                // Relax Ball(y) members via x -> y -> z
+                // If y improved and y is non-R, propagate to b(y)
+                if(d[y] < old_dy && !B.isR[y])
+                    dk(B.b[y], d[y] + B.dist_to_bv[y]);
+
+                // Also relax Ball(y) members via x → y → z
                 for(size_t i = 0; i < B.ball[y].size(); ++i){
                     int z = B.ball[y][i];
-                    if(z >= 0 && z < N){
-                        double dist_yz = B.dist_ball[y][i];
-                        relax(z, d[x] + e.weight + dist_yz);
-                    }
+                    double old_dz = d[z];
+                    dk(z, d[x] + w + B.dist_ball[y][i]);
+
+                    // If z improved and z is non-R, propagate to b(z)
+                    if(d[z] < old_dz && !B.isR[z])
+                        dk(B.b[z], d[z] + B.dist_to_bv[z]);
                 }
             }
-        }
+        };
+
+        relax_from(u);
+        for(int x : B.bundles[u])
+            relax_from(x);
     }
 
     return d;
