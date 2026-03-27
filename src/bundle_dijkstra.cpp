@@ -92,9 +92,12 @@ std::vector<double> BundleDijkstra(const Graph &G, int s,
                 }
             }
 
-            // (d) Propagate back: d[b(v)] via v
-            //     b(v) = u, so update d[u]
-            dk(u, d[v] + B.dist_to_bv[v]);
+            // (c-extra) z2 = v
+            for(auto &e : G.adj[v]){
+                int z = e.to;
+                if(d[z] < INF)
+                    dk(v, d[z] + e.weight);
+            }
         }
 
         /* =========================================== */

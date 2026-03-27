@@ -86,10 +86,14 @@ std::vector<double> BundleDijkstra_Fib(
                 }
             }
 
-            // (d) Propagate back to b(v) = u
-            dk(u, d[v] + B.dist_to_bv[v]);
+            // (c-extra) z2 = v
+            for(auto &e : G.adj[v]){
+                int z = e.to;
+                if(d[z] < INF)
+                    dk(v, d[z] + e.weight);
+            }
         }
-
+        
         /* =========================================== */
         /*  STEP 2: Relax neighbors of Bundle(u) ∪ {u} */
         /* =========================================== */
