@@ -1,9 +1,19 @@
 #include "bundle_dijkstra.h"
+#include <queue>
 #include <limits>
-#include <set>
 using namespace std;
 
-vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profiler *P)
+/*
+ * Bundle Dijkstra — Binary Heap (priority_queue) version
+ *
+ * Uses lazy decrease-key:
+ *  - multiple entries allowed
+ *  - stale entries skipped during pop
+ *
+ * Only R-vertices are inserted into heap.
+ */
+
+vector<double> BundleDijkstra_PQ(const Graph &G, int s, const BundleInfo &B, Profiler *P)
 {
     int N = G.adj.size();
     const double INF = numeric_limits<double>::infinity();
@@ -11,59 +21,61 @@ vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profile
     vector<double> d(N, INF);
     d[s] = 0.0;
 
-    // Counters
+    // Counters (same style as your other versions)
     long long cnt_extract = 0;
     long long cnt_dk = 0;
     long long cnt_relax_edge = 0;
     long long cnt_ball_access = 0;
 
-    set<pair<double,int>> Hset;
-    vector<set<pair<double,int>>::iterator> heap_it(N);
-    vector<char> in_heap(N, 0);
+    using PQ = priority_queue<pair<double,int>, vector<pair<double,int>>, greater<>>;
+    PQ pq;
 
+    // Insert all R vertices
     for(int r : B.R_list){
-        auto it = Hset.insert({d[r], r}).first;
-        heap_it[r] = it;
-        in_heap[r] = 1;
+        pq.push({d[r], r});
     }
 
+    // Lazy decrease-key
     auto dk = [&](int v, double nd){
         if(nd >= d[v]) return;
 
-        cnt_dk++;   // 👈 count decrease-key
+        cnt_dk++;
 
         d[v] = nd;
 
         if(B.isR[v]){
-            if(in_heap[v])
-                Hset.erase(heap_it[v]);
-            heap_it[v] = Hset.insert({nd, v}).first;
-            in_heap[v] = 1;
+            pq.push({nd, v});   // lazy insert
         }
     };
 
-    while(!Hset.empty())
+    while(!pq.empty())
     {
-        auto it = Hset.begin();
-        auto [du, u] = *it;
-        Hset.erase(it);
-        in_heap[u] = 0;
+        auto [du, u] = pq.top();
+        pq.pop();
 
-        cnt_extract++;   // 👈 count extract-min
+        cnt_extract++;
 
-        /* STEP 1 */
+        // Skip stale entries
+        if(du != d[u]) continue;
+
+        /* =========================================== */
+        /* STEP 1: Process Bundle(u)                   */
+        /* =========================================== */
         for(int v : B.bundles[u])
         {
+            // (a)
             dk(v, d[u] + B.dist_to_bv[v]);
 
+            // (b)
             for(size_t i = 0; i < B.ball[v].size(); ++i){
-                cnt_ball_access++;   // 👈 count ball access
+                cnt_ball_access++;
 
                 int y = B.ball[v][i];
                 if(d[y] < INF)
                     dk(v, d[y] + B.dist_ball[v][i]);
             }
 
+            // (c)
             for(size_t i = 0; i < B.ball[v].size(); ++i){
                 cnt_ball_access++;
 
@@ -71,7 +83,7 @@ vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profile
                 double dist_yv = B.dist_ball[v][i];
 
                 for(auto &e : G.adj[y]){
-                    cnt_relax_edge++;   // 👈 count edge relax attempts
+                    cnt_relax_edge++;
 
                     int z = e.to;
                     if(d[z] < INF)
@@ -79,7 +91,7 @@ vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profile
                 }
             }
 
-            // z2 = v
+            // (c-extra)
             for(auto &e : G.adj[v]){
                 cnt_relax_edge++;
 
@@ -89,7 +101,9 @@ vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profile
             }
         }
 
-        /* STEP 2 */
+        /* =========================================== */
+        /* STEP 2: Relax neighbors                     */
+        /* =========================================== */
         auto relax_from = [&](int x){
             for(auto &e : G.adj[x]){
                 cnt_relax_edge++;
@@ -123,10 +137,10 @@ vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profile
 
     // Store counters
     if(P){
-        P->incr("set_extract", cnt_extract);
-        P->incr("set_dk", cnt_dk);
-        P->incr("set_edge_relax", cnt_relax_edge);
-        P->incr("set_ball_access", cnt_ball_access);
+        P->incr("pq_extract", cnt_extract);
+        P->incr("pq_dk", cnt_dk);
+        P->incr("pq_edge_relax", cnt_relax_edge);
+        P->incr("pq_ball_access", cnt_ball_access);
     }
 
     return d;

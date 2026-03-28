@@ -9,3 +9,6 @@ std::vector<double> BundleDijkstra(const Graph &G,int s,const BundleInfo &Binfo,
 
 // Fibonacci heap version
 std::vector<double> BundleDijkstra_Fib(const Graph &G,int s,const BundleInfo &Binfo,Profiler *P=nullptr);
+
+// binary heap version with priority queue (std::priority_queue)
+std::vector<double> BundleDijkstra_PQ(const Graph &G,int s,const BundleInfo &Binfo,Profiler *P=nullptr);

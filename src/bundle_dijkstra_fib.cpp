@@ -2,29 +2,28 @@
 #include "bundle_dijkstra.h"
 #include "dijkstra_fibheap.h"
 #include <limits>
+using namespace std;
 
-/*
- * Bundle Dijkstra — Fibonacci heap version  (Algorithm 2 from the paper)
- *
- * Same algorithm as the set-based version, but uses Boost Fibonacci heap
- * for O(1) amortized decrease-key on R-vertices.
- */
-
-std::vector<double> BundleDijkstra_Fib(
-    const Graph &G, int s, const BundleInfo &B, Profiler * /*P*/)
+vector<double> BundleDijkstra_Fib(const Graph &G, int s, const BundleInfo &B, Profiler *P)
 {
     int N = G.adj.size();
-    const double INF = std::numeric_limits<double>::infinity();
+    const double INF = numeric_limits<double>::infinity();
 
-    std::vector<double> d(N, INF);
+    vector<double> d(N, INF);
     d[s] = 0.0;
 
+    // Counters
+    long long cnt_extract = 0;
+    long long cnt_dk = 0;
+    long long cnt_relax_edge = 0;
+    long long cnt_ball_access = 0;
+
     using FibHeap = boost::heap::fibonacci_heap<
-        Node, boost::heap::compare<std::greater<Node>>>;
+        Node, boost::heap::compare<greater<Node>>>;
 
     FibHeap heap;
-    std::vector<FibHeap::handle_type> handles(N);
-    std::vector<char> in_heap(N, 0);
+    vector<FibHeap::handle_type> handles(N);
+    vector<char> in_heap(N, 0);
 
     // Insert all R-vertices
     for(int r : B.R_list){
@@ -32,9 +31,11 @@ std::vector<double> BundleDijkstra_Fib(
         in_heap[r] = 1;
     }
 
-    // decrease_key: always update d[v]; if v is R, update Fib heap
+    // decrease_key
     auto dk = [&](int v, double nd){
         if(nd >= d[v]) return;
+
+        cnt_dk++;   // 👈 count decrease-key
 
         d[v] = nd;
 
@@ -53,52 +54,56 @@ std::vector<double> BundleDijkstra_Fib(
         Node top = heap.top();
         heap.pop();
 
+        cnt_extract++;   // 👈 count extract-min
+
         int u = top.vertex;
         in_heap[u] = 0;
 
-        // Skip stale (already processed with a better distance)
         if(top.dist > d[u]) continue;
 
-        /* =========================================== */
-        /*  STEP 1: Process Bundle(u)                  */
-        /* =========================================== */
+        /* STEP 1 */
         for(int v : B.bundles[u])
         {
-            // (a) d[v] via b(v) = u
             dk(v, d[u] + B.dist_to_bv[v]);
 
-            // (b) d[v] via Ball(v) members
             for(size_t i = 0; i < B.ball[v].size(); ++i){
+                cnt_ball_access++;   // 👈
+
                 int y = B.ball[v][i];
                 if(d[y] < INF)
                     dk(v, d[y] + B.dist_ball[v][i]);
             }
 
-            // (c) d[v] via one-hop: z → y, y ∈ Ball(v)
             for(size_t i = 0; i < B.ball[v].size(); ++i){
+                cnt_ball_access++;
+
                 int y = B.ball[v][i];
                 double dist_yv = B.dist_ball[v][i];
 
                 for(auto &e : G.adj[y]){
+                    cnt_relax_edge++;   // 👈
+
                     int z = e.to;
                     if(d[z] < INF)
                         dk(v, d[z] + e.weight + dist_yv);
                 }
             }
 
-            // (c-extra) z2 = v
+            // z2 = v
             for(auto &e : G.adj[v]){
+                cnt_relax_edge++;
+
                 int z = e.to;
                 if(d[z] < INF)
                     dk(v, d[z] + e.weight);
             }
         }
-        
-        /* =========================================== */
-        /*  STEP 2: Relax neighbors of Bundle(u) ∪ {u} */
-        /* =========================================== */
+
+        /* STEP 2 */
         auto relax_from = [&](int x){
             for(auto &e : G.adj[x]){
+                cnt_relax_edge++;
+
                 int y = e.to;
                 double w = e.weight;
 
@@ -109,6 +114,8 @@ std::vector<double> BundleDijkstra_Fib(
                     dk(B.b[y], d[y] + B.dist_to_bv[y]);
 
                 for(size_t i = 0; i < B.ball[y].size(); ++i){
+                    cnt_ball_access++;
+
                     int z = B.ball[y][i];
                     double old_dz = d[z];
                     dk(z, d[x] + w + B.dist_ball[y][i]);
@@ -122,6 +129,14 @@ std::vector<double> BundleDijkstra_Fib(
         relax_from(u);
         for(int x : B.bundles[u])
             relax_from(x);
+    }
+
+    // Store counters
+    if(P){
+        P->incr("fib_extract", cnt_extract);
+        P->incr("fib_dk", cnt_dk);
+        P->incr("fib_edge_relax", cnt_relax_edge);
+        P->incr("fib_ball_access", cnt_ball_access);
     }
 
     return d;

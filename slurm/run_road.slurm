@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=dijkstra_er
-#SBATCH --partition=gpu1
+#SBATCH --job-name=dijkstra_road
+#SBATCH --partition=gpu2
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --time=120:00:00
+#SBATCH --time=5:00:00
 #SBATCH --output=slurm_%j.out
 #SBATCH --error=slurm_%j.err
 

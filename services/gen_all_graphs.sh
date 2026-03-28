@@ -14,8 +14,8 @@ echo "======================================"
 echo " Generating ER graphs"
 echo "======================================"
 
-for n in 1000 10000 100000 1000000; do
-  for m in $((2*n)) $((5*n)) $((10*n)); do
+for n in 2000000 5000000; do
+  for m in $((2*n)) $((5*n)) $((10*n)) $((20*n)); do
     OUT="graphs/er/er_${n}_${m}.txt"
 
     if [ ! -f "$OUT" ]; then
@@ -34,7 +34,7 @@ echo "======================================"
 echo " Generating Sparse Random graphs"
 echo "======================================"
 
-for exp in $(seq 7 21); do
+for exp in $(seq 22 23); do
   n=$((2**exp))
   OUT="graphs/sparse_random/sparse_${n}.txt"
 

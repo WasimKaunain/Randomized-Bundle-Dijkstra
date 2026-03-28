@@ -115,6 +115,15 @@ int main(int argc, char** argv){
     P.stop("dijkstra_ref");
 
     /* ---------------------------------------------------- */
+    /* Bundle Dijkstra (Binary heap)                          */
+    /* ---------------------------------------------------- */
+
+    P.start("bundle_dijkstra_pq");
+    auto d_bundle_pq = BundleDijkstra_PQ(Gp, source, Binfo, &P);
+    P.stop("bundle_dijkstra_pq");
+
+
+    /* ---------------------------------------------------- */
     /* Bundle Dijkstra (Set-based)                          */
     /* ---------------------------------------------------- */
 
@@ -149,9 +158,11 @@ int main(int argc, char** argv){
         return true;
     };
 
+    bool bundle_pq_ok  = check(d_bundle_pq,  "Bundle_PQ");
     bool bundle_ok     = check(d_bundle,     "Bundle_Set");
     bool bundle_fib_ok = check(d_bundle_fib, "Bundle_Fib");
 
+    std::cerr << "Bundle_PQ correctness:  " << (bundle_pq_ok  ? "OK" : "FAIL") << "\n";
     std::cerr << "Bundle_Set correctness: " << (bundle_ok     ? "OK" : "FAIL") << "\n";
     std::cerr << "Bundle_Fib correctness: " << (bundle_fib_ok ? "OK" : "FAIL") << "\n";
 
@@ -164,7 +175,6 @@ int main(int argc, char** argv){
     else if(is_sparse_graph) csv_file = "Output/sparse_results.csv";
     else                     csv_file = "Output/road_results.csv";
 
-    // Check if file is empty (need header)
     {
         std::ifstream fin(csv_file);
         bool empty = (!fin.good() || fin.peek() == std::ifstream::traits_type::eof());
@@ -175,26 +185,54 @@ int main(int argc, char** argv){
         if(empty){
             fout << "Graph,#Nodes,#Edges,#Nodes_T,#Edges_T,K,Seed,"
                  << "Ref_ms,"
-                 << "Bundle_Set_ms,Bundle_Fib_ms,"
+                 << "Bundle_PQ_ms,Bundle_Set_ms,Bundle_Fib_ms,"
                  << "Bundle_construct_ms,"
                  << "R_size,sum_ball_sizes,"
-                 << "bundle_correct,bundle_fib_correct\n";
+                     
+                 << "pq_extract,pq_dk,pq_edge_relax,pq_ball_access,"
+                 << "set_extract,set_dk,set_edge_relax,set_ball_access,"
+                 << "fib_extract,fib_dk,fib_edge_relax,fib_ball_access,"
+                     
+                 << "bundle_pq_correct,bundle_correct,bundle_fib_correct\n";
         }
 
         fout << filename << ","
              << N << "," << mcount << ","
              << Nt << "," << Mt << ","
              << k << "," << seed << ","
+            
              << P.get_time_ms("dijkstra_ref") << ","
+             << P.get_time_ms("bundle_dijkstra_pq") << ","
              << P.get_time_ms("bundle_dijkstra") << ","
              << P.get_time_ms("bundle_dijkstra_fib") << ","
+            
              << P.get_time_ms("bundle_construct") << ","
              << P.get_counter("R_size") << ","
              << P.get_counter("sum_ball_sizes") << ","
+            
+             // PQ
+             << P.get_counter("pq_extract") << ","
+             << P.get_counter("pq_dk") << ","
+             << P.get_counter("pq_edge_relax") << ","
+             << P.get_counter("pq_ball_access") << ","
+            
+             // SET
+             << P.get_counter("set_extract") << ","
+             << P.get_counter("set_dk") << ","
+             << P.get_counter("set_edge_relax") << ","
+             << P.get_counter("set_ball_access") << ","
+            
+             // FIB
+             << P.get_counter("fib_extract") << ","
+             << P.get_counter("fib_dk") << ","
+             << P.get_counter("fib_edge_relax") << ","
+             << P.get_counter("fib_ball_access") << ","
+            
+             << (bundle_pq_ok ? 1 : 0) << ","
              << (bundle_ok ? 1 : 0) << ","
              << (bundle_fib_ok ? 1 : 0) << "\n";
-
-        fout.close();
+            
+                fout.close();
     }
 
     return 0;
