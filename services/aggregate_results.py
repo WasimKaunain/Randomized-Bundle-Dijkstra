@@ -35,6 +35,9 @@ def process_file(filepath):
     averaged["Total_Bundle_Fib_ms"] = (
         averaged["Bundle_construct_ms"] + averaged["Bundle_Fib_ms"]
     )
+    averaged["Total_Bundle_PQ_ms"] = (
+        averaged["Bundle_construct_ms"] + averaged["Bundle_PQ_ms"]
+    )
 
     # Sort by graph name
     averaged = averaged.sort_values("Graph")
