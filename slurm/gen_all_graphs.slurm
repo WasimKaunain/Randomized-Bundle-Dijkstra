@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=bundle_dijkstra_large
-#SBATCH --partition=gpu2
+#SBATCH --partition=gpu1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --time=72:00:00
 #SBATCH --output=logs/slurm_%j.out
 #SBATCH --error=logs/slurm_%j.err
 
