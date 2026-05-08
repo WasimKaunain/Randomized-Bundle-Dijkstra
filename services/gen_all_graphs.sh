@@ -15,7 +15,7 @@ echo " Generating ER graphs"
 echo "======================================"
 
 for n in 1000 10000 100000 1000000; do
-  for m in $((2*n)) $((5*n)) $((10*n)) $((20*n)); do
+  for m in $((2*n)) $((5*n)) $((10*n)); do
     OUT="graphs/er/er_${n}_${m}.txt"
 
     if [ ! -f "$OUT" ]; then

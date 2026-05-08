@@ -10,18 +10,19 @@
 #include <cmath>
 #include <fstream>
 #include <cstdlib>
+using namespace std;
 
 void print_usage(){
-    std::cout << "Usage: bin/bundle --graph path --source s --seed S\n";
+    cout << "Usage: bin/bundle --graph path --source s --seed S\n";
 }
 
 int main(int argc, char** argv){
-    std::string graph_file;
+    string graph_file;
     int source = 0;
     int seed = 1;
 
     for(int i = 1; i < argc; i++){
-        std::string arg = argv[i];
+        string arg = argv[i];
         if(arg == "--graph" && i+1 < argc)       graph_file = argv[++i];
         else if(arg == "--source" && i+1 < argc)  source = atoi(argv[++i]);
         else if(arg == "--seed" && i+1 < argc)    seed = atoi(argv[++i]);
@@ -37,9 +38,9 @@ int main(int argc, char** argv){
     /* Determine graph type from filename                   */
     /* ---------------------------------------------------- */
 
-    std::string filename = graph_file;
+    string filename = graph_file;
     auto pos = filename.find_last_of("/\\");
-    if(pos != std::string::npos)
+    if(pos != string::npos)
         filename = filename.substr(pos + 1);
 
     bool is_er_graph     = (filename.rfind("er", 0) == 0);
@@ -65,9 +66,23 @@ int main(int argc, char** argv){
     std::cerr << "Loaded graph: n=" << N << " m~" << mcount << "\n";
 
     // k = ceil(sqrt(log(N) / log(log(N))))
-    int k = std::max(2, (int)std::ceil(
-        std::sqrt(std::log((double)N) / std::log(std::log((double)N)))
-    ));
+    int k = max(2, (int)ceil(sqrt(log((double)N) / log(log((double)N)))));
+
+    /* ---------------------------------------------------- */
+    /* Reference Dijkstra                                   */
+    /* ---------------------------------------------------- */
+
+    P.start("dijkstra_ref");
+    auto d_ref = DijkstraRef(G, source, &P);
+    P.stop("dijkstra_ref");
+
+    /* ---------------------------------------------------- */
+    /* Reference Dijkstra with fib heap                                  */
+    /* ---------------------------------------------------- */
+
+    P.start("dijkstra_ref_fib");
+    auto d_ref_fib = DijkstraRefFib(G, source, &P);
+    P.stop("dijkstra_ref_fib");
 
     /* ---------------------------------------------------- */
     /* Constant-degree transformation (ER graphs only)      */
@@ -77,23 +92,26 @@ int main(int argc, char** argv){
     int Nt = 0;
     long long Mt = 0;
 
-    if(is_er_graph){
-        P.start("transform");
-        Gp = constant_degree_transform(G);
-        P.stop("transform");
+    if(is_er_graph)
+        {
+            P.start("transform");
+            Gp = constant_degree_transform(G);
+            P.stop("transform");
 
-        Nt = Gp.adj.size();
-        for(const auto &nbrs : Gp.adj)
-            Mt += nbrs.size();
-        Mt /= 2;
+            Nt = Gp.adj.size();
+            for(const auto &neighbours : Gp.adj)
+                Mt += neighbours.size();
+            Mt /= 2;
 
-        std::cerr << "Transformed: n'=" << Nt << " m'=" << Mt << "\n";
-    } else {
-        Gp = G;
-        Nt = N;
-        Mt = mcount;
-        std::cerr << "Transformation skipped\n";
-    }
+            cerr << "Transformed: n'=" << Nt << " m'=" << Mt << "\n";
+        } 
+    else 
+        {
+            Gp = G;
+            Nt = N;
+            Mt = mcount;
+            cerr << "Transformation skipped\n";
+        }
 
     /* ---------------------------------------------------- */
     /* Bundle Construction                                  */
@@ -106,13 +124,6 @@ int main(int argc, char** argv){
     std::cerr << "k=" << k
               << " R_size=" << Binfo.R_list.size() << "\n";
 
-    /* ---------------------------------------------------- */
-    /* Reference Dijkstra                                   */
-    /* ---------------------------------------------------- */
-
-    P.start("dijkstra_ref");
-    auto d_ref = DijkstraRef(Gp, source, &P);
-    P.stop("dijkstra_ref");
 
     /* ---------------------------------------------------- */
     /* Bundle Dijkstra (Binary heap)                          */
@@ -127,9 +138,9 @@ int main(int argc, char** argv){
     /* Bundle Dijkstra (Set-based)                          */
     /* ---------------------------------------------------- */
 
-    P.start("bundle_dijkstra");
-    auto d_bundle = BundleDijkstra(Gp, source, Binfo, &P);
-    P.stop("bundle_dijkstra");
+    P.start("bundle_dijkstra_set");
+    auto d_bundle_set = BundleDijkstra(Gp, source, Binfo, &P);
+    P.stop("bundle_dijkstra_set");
 
     /* ---------------------------------------------------- */
     /* Bundle Dijkstra (Fibonacci heap)                     */
@@ -145,46 +156,46 @@ int main(int argc, char** argv){
 
     const double EPS = 1e-8;
 
-    auto check = [&](const std::vector<double>& A, const char* name) -> bool {
-        for(int i = 0; i < Nt; i++){
-            if(std::abs(d_ref[i] - A[i]) > EPS){
-                std::cerr << "Mismatch in " << name
-                          << " at node " << i
-                          << " ref=" << d_ref[i]
-                          << " got=" << A[i] << "\n";
-                return false;
+    auto check = [&](const vector<double>& A, const char* name) -> bool 
+        {
+            for(int i = 0; i < Nt; i++){
+                if(abs(d_ref[i] - A[i]) > EPS)
+                    {
+                        cerr << "Mismatch in " << name << " at node " << i << " ref=" << d_ref[i] << " got=" << A[i] << "\n";
+                        return false;
+                    }
             }
-        }
-        return true;
-    };
+            return true;
+        };
 
     bool bundle_pq_ok  = check(d_bundle_pq,  "Bundle_PQ");
-    bool bundle_ok     = check(d_bundle,     "Bundle_Set");
+    bool bundle_set_ok  = check(d_bundle_set,  "Bundle_Set");
     bool bundle_fib_ok = check(d_bundle_fib, "Bundle_Fib");
 
-    std::cerr << "Bundle_PQ correctness:  " << (bundle_pq_ok  ? "OK" : "FAIL") << "\n";
-    std::cerr << "Bundle_Set correctness: " << (bundle_ok     ? "OK" : "FAIL") << "\n";
-    std::cerr << "Bundle_Fib correctness: " << (bundle_fib_ok ? "OK" : "FAIL") << "\n";
+    cerr << "Bundle_PQ correctness:  " << (bundle_pq_ok  ? "OK" : "FAIL") << "\n";
+    cerr << "Bundle_Set correctness: " << (bundle_set_ok  ? "OK" : "FAIL") << "\n";
+    cerr << "Bundle_Fib correctness: " << (bundle_fib_ok ? "OK" : "FAIL") << "\n";
 
     /* ---------------------------------------------------- */
     /* CSV Output                                           */
     /* ---------------------------------------------------- */
 
-    std::string csv_file;
+    string csv_file;
     if(is_er_graph)          csv_file = "Output/er_results.csv";
     else if(is_sparse_graph) csv_file = "Output/sparse_results.csv";
     else                     csv_file = "Output/road_results.csv";
 
     {
-        std::ifstream fin(csv_file);
-        bool empty = (!fin.good() || fin.peek() == std::ifstream::traits_type::eof());
+        ifstream fin(csv_file);
+        bool empty = (!fin.good() || fin.peek() == ifstream::traits_type::eof());
         fin.close();
 
-        std::ofstream fout(csv_file, std::ios::app);
+        ofstream fout(csv_file, ios::app);
 
         if(empty){
-            fout << "Graph,#Nodes,#Edges,#Nodes_T,#Edges_T,K,Seed,"
-                 << "Ref_ms,"
+            fout << "Graph,#Nodes,#Edges,#Nodes_T,#Edges_T,K,Seed,";
+            if(is_er_graph) fout << "Transform_ms,";
+            fout << "Ref_ms,Ref_Fib_ms,"
                  << "Bundle_PQ_ms,Bundle_Set_ms,Bundle_Fib_ms,"
                  << "Bundle_construct_ms,"
                  << "R_size,sum_ball_sizes,"
@@ -199,11 +210,13 @@ int main(int argc, char** argv){
         fout << filename << ","
              << N << "," << mcount << ","
              << Nt << "," << Mt << ","
-             << k << "," << seed << ","
+             << k << "," << seed << ",";
+        if(is_er_graph) fout << P.get_time_ms("transform") << ",";
             
-             << P.get_time_ms("dijkstra_ref") << ","
+        fout << P.get_time_ms("dijkstra_ref") << ","
+             << P.get_time_ms("dijkstra_ref_fib") << ","
              << P.get_time_ms("bundle_dijkstra_pq") << ","
-             << P.get_time_ms("bundle_dijkstra") << ","
+             << P.get_time_ms("bundle_dijkstra_set") << ","
              << P.get_time_ms("bundle_dijkstra_fib") << ","
             
              << P.get_time_ms("bundle_construct") << ","
@@ -229,7 +242,7 @@ int main(int argc, char** argv){
              << P.get_counter("fib_ball_access") << ","
             
              << (bundle_pq_ok ? 1 : 0) << ","
-             << (bundle_ok ? 1 : 0) << ","
+             << (bundle_set_ok ? 1 : 0) << ","
              << (bundle_fib_ok ? 1 : 0) << "\n";
             
                 fout.close();

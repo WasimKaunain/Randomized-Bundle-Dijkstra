@@ -63,7 +63,8 @@ BundleInfo BundleConstruction(const Graph &G, int s, int k,Profiler *P, int seed
         for(int v = 0; v < N; ++v)
         {
             // R-vertices are their own bundle leader
-            if(B.isR[v]){
+            if(B.isR[v])
+            {
                 B.b[v] = v;
                 B.dist_to_bv[v] = 0.0;
                 continue;
@@ -121,12 +122,12 @@ BundleInfo BundleConstruction(const Graph &G, int s, int k,Profiler *P, int seed
             touched.clear();
 
             // Fallback: if no R-vertex reachable (should not happen)
-            if(bv == -1){
-                bv      = B.R_list[0];
-                bv_dist = INF;
-                cerr << "WARNING: Vertex " << v
-                          << " cannot reach any R vertex!\n";
-            }
+            if(bv == -1)
+                {
+                    bv      = B.R_list[0];
+                    bv_dist = INF;
+                    cerr << "WARNING: Vertex " << v << " cannot reach any R vertex!\n";
+                }
 
             B.b[v]          = bv;
             B.dist_to_bv[v] = bv_dist;
@@ -140,24 +141,25 @@ BundleInfo BundleConstruction(const Graph &G, int s, int k,Profiler *P, int seed
         /* ------ Step 3: Build bundles ------ */
 
         long long total_bundle = 0;
-        for(int v = 0; v < N; ++v){
-            int bv = B.b[v];
-            if(bv != v){   // v is not its own leader → v ∈ Bundle(bv)
-                B.bundles[bv].push_back(v);
-                total_bundle++;
+        for(int v = 0; v < N; ++v)
+            {
+                int bv = B.b[v];
+                if(bv != v){   // v is not its own leader → v ∈ Bundle(bv)
+                    B.bundles[bv].push_back(v);
+                    total_bundle++;
+                }
             }
-        }
 
         long long total_ball = 0;
         for(int v = 0; v < N; ++v)
-            if(!B.isR[v])
-                total_ball += B.ball[v].size();
+            {
+                if(!B.isR[v])
+                    {if(B.ball[v].size() > 0) total_ball++;}
+            }
 
         if(P) P->incr("sum_ball_sizes", total_ball);
 
-        cerr << "Bundle construction done: R=" << B.R_list.size()
-                  << " total_ball=" << total_ball
-                  << " total_bundle=" << total_bundle << "\n";
+        cerr << "Bundle construction done: R=" << B.R_list.size() << " total_ball=" << total_ball << " total_bundle=" << total_bundle << "\n";
 
         return B;
     }

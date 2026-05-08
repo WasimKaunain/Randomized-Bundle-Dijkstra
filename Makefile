@@ -16,6 +16,7 @@ CORE_SRCS := \
 	$(SRC_DIR)/bundle_dijkstra_fib.cpp \
 	$(SRC_DIR)/dijkstra_ref.cpp \
 	$(SRC_DIR)/bundle_dijkstra_pq.cpp \
+    $(SRC_DIR)/dijkstra_ref_fib.cpp \
 	
 
 CORE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(CORE_SRCS))

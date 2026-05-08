@@ -4,11 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-plt.rcParams.update({
-    'font.family': 'serif',
-    'axes.spines.top': False,
-    'axes.spines.right': False,
-})
+plt.rcParams.update({'font.family': 'serif','axes.spines.top': False,'axes.spines.right': False,})
 
 # Colors (clean & consistent)
 COLORS = {

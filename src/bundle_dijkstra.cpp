@@ -3,7 +3,7 @@
 #include <set>
 using namespace std;
 
-vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profiler *P)
+vector<double> BundleDijkstra(const Graph &G, int s, const BundleInfo &B, Profiler *P)
 {
     int N = G.adj.size();
     const double INF = numeric_limits<double>::infinity();
@@ -21,113 +21,139 @@ vector<double> BundleDijkstra(const Graph &G, int s,const BundleInfo &B, Profile
     vector<set<pair<double,int>>::iterator> heap_it(N);
     vector<char> in_heap(N, 0);
 
-    for(int r : B.R_list){
-        auto it = Hset.insert({d[r], r}).first;
-        heap_it[r] = it;
-        in_heap[r] = 1;
-    }
-
-    auto dk = [&](int v, double nd){
-        if(nd >= d[v]) return;
-
-        cnt_dk++;   // 👈 count decrease-key
-
-        d[v] = nd;
-
-        if(B.isR[v]){
-            if(in_heap[v])
-                Hset.erase(heap_it[v]);
-            heap_it[v] = Hset.insert({nd, v}).first;
-            in_heap[v] = 1;
+    // Insert only R vertices into heap
+    for(int r : B.R_list)
+        {
+            auto it = Hset.insert({d[r], r}).first;
+            heap_it[r] = it;
+            in_heap[r] = 1;
         }
-    };
+
+
+    auto Relax = [&](auto&& self, int v, double D) -> void
+        {
+            if(D >= d[v]) return;
+
+            d[v] = D;
+            cnt_dk++;
+
+            if(B.isR[v])
+                {
+                    if(in_heap[v])
+                        Hset.erase(heap_it[v]);
+                    heap_it[v] = Hset.insert({D, v}).first;
+                    in_heap[v] = 1;
+                }
+            else self(self, B.b[v], d[v] + B.dist_to_bv[v]);
+        };
 
     while(!Hset.empty())
-    {
-        auto it = Hset.begin();
-        auto [du, u] = *it;
-        Hset.erase(it);
-        in_heap[u] = 0;
-
-        cnt_extract++;   // 👈 count extract-min
-
-        /* STEP 1 */
-        for(int v : B.bundles[u])
         {
-            dk(v, d[u] + B.dist_to_bv[v]);
+            auto it = Hset.begin();
+            auto [du, u] = *it;
+            Hset.erase(it);
+            in_heap[u] = 0;
 
-            for(size_t i = 0; i < B.ball[v].size(); ++i){
-                cnt_ball_access++;   // 👈 count ball access
+            cnt_extract++;
 
-                int y = B.ball[v][i];
-                if(d[y] < INF)
-                    dk(v, d[y] + B.dist_ball[v][i]);
-            }
+            /* ===================== STEP 1 ===================== */
+            for(int v : B.bundles[u])
+                {
+                    // Relax(v, d(u) + dist(u,v))
+                    Relax(Relax, v, d[u] + B.dist_to_bv[v]);
 
-            for(size_t i = 0; i < B.ball[v].size(); ++i){
-                cnt_ball_access++;
+                    // Relax via Ball(v)
+                    for(size_t i = 0; i < B.ball[v].size(); ++i)
+                        {
+                            cnt_ball_access++;
+                        
+                            int y = B.ball[v][i];
+                            Relax(Relax, v, d[y] + B.dist_ball[v][i]);
+                        }
 
-                int y = B.ball[v][i];
-                double dist_yv = B.dist_ball[v][i];
+                    // z2 in Ball(v)
+                    for(size_t i = 0; i < B.ball[v].size(); ++i)
+                        {
+                            cnt_ball_access++;
 
-                for(auto &e : G.adj[y]){
-                    cnt_relax_edge++;   // 👈 count edge relax attempts
+                            int z2 = B.ball[v][i];
+                            double dist_z2v = B.dist_ball[v][i];
 
-                    int z = e.to;
-                    if(d[z] < INF)
-                        dk(v, d[z] + e.weight + dist_yv);
+                            for(auto &e : G.adj[z2])
+                                {
+                                    cnt_relax_edge++;
+                                
+                                    int z1 = e.to;
+                                    Relax(Relax, v, d[z1] + e.weight + dist_z2v);
+                                }
+                        }
+
+                    // z2 = v case
+                    for(auto &e : G.adj[v])
+                        {
+                            cnt_relax_edge++;
+
+                            int z1 = e.to;
+                            Relax(Relax, v, d[z1] + e.weight);
+                        }
                 }
-            }
 
-            // z2 = v
-            for(auto &e : G.adj[v]){
-                cnt_relax_edge++;
+            /* ===================== STEP 2 ===================== */
 
-                int z = e.to;
-                if(d[z] < INF)
-                    dk(v, d[z] + e.weight);
-            }
-        }
-
-        /* STEP 2 */
-        auto relax_from = [&](int x){
-            for(auto &e : G.adj[x]){
+            // First process u itself
+            for(auto &e : G.adj[u])
+            {
                 cnt_relax_edge++;
 
                 int y = e.to;
                 double w = e.weight;
 
-                double old_dy = d[y];
-                dk(y, d[x] + w);
+                Relax(Relax, y, d[u] + w);
 
-                if(d[y] < old_dy && !B.isR[y])
-                    dk(B.b[y], d[y] + B.dist_to_bv[y]);
-
-                for(size_t i = 0; i < B.ball[y].size(); ++i){
+                for(size_t i = 0; i < B.ball[y].size(); ++i)
+                {
                     cnt_ball_access++;
 
                     int z = B.ball[y][i];
-                    double old_dz = d[z];
-                    dk(z, d[x] + w + B.dist_ball[y][i]);
+                    double dist_yz = B.dist_ball[y][i];
 
-                    if(d[z] < old_dz && !B.isR[z])
-                        dk(B.b[z], d[z] + B.dist_to_bv[z]);
+                    Relax(Relax, z, d[u] + w + dist_yz);
                 }
             }
-        };
 
-        relax_from(u);
-        for(int x : B.bundles[u])
-            relax_from(x);
-    }
+            // Then process bundles
+            for(int x : B.bundles[u])
+            {
+                for(auto &e : G.adj[x])
+                {
+                    cnt_relax_edge++;
+
+                    int y = e.to;
+                    double w = e.weight;
+
+                    Relax(Relax, y, d[x] + w);
+
+                    for(size_t i = 0; i < B.ball[y].size(); ++i)
+                    {
+                        cnt_ball_access++;
+
+                        int z = B.ball[y][i];
+                        double dist_yz = B.dist_ball[y][i];
+
+                        Relax(Relax, z, d[x] + w + dist_yz);
+                    }
+                }
+            }
+        }
 
     // Store counters
-    if(P){
-        P->incr("set_extract", cnt_extract);
-        P->incr("set_dk", cnt_dk);
-        P->incr("set_edge_relax", cnt_relax_edge);
-        P->incr("set_ball_access", cnt_ball_access);
-    }
+    if(P)
+        {
+            P->incr("set_extract", cnt_extract);
+            P->incr("set_dk", cnt_dk);
+            P->incr("set_edge_relax", cnt_relax_edge);
+            P->incr("set_ball_access", cnt_ball_access);
+        }
 
     return d;
 }

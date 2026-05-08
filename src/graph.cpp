@@ -5,6 +5,7 @@
 #include <iostream>
 #include <queue>
 #include <limits>
+using namespace std;
 
 /* ================================================================ */
 /*  add_edge: adds an undirected edge (both directions)             */
@@ -13,7 +14,7 @@ void Graph::add_edge(int u, int v, double w)
 {
     if(u < 0 || v < 0) return;
     if(u >= (int)adj.size() || v >= (int)adj.size()){
-        int newn = std::max(u, v) + 1;
+        int newn = max(u, v) + 1;
         adj.resize(newn);
         n = newn;
     }
@@ -29,13 +30,13 @@ void Graph::add_edge(int u, int v, double w)
 /*  both directions, we keep only arcs with u < v to avoid 4x      */
 /*  duplication.                                                    */
 /* ================================================================ */
-Graph Graph::load_edge_list(const std::string &fname)
+Graph Graph::load_edge_list(const string &fname)
 {
     Graph G;
-    std::ifstream in(fname);
+    ifstream in(fname);
 
     if(!in){
-        std::cerr << "Cannot open graph file: " << fname << "\n";
+        cerr << "Cannot open graph file: " << fname << "\n";
         return G;
     }
 
@@ -43,18 +44,18 @@ Graph Graph::load_edge_list(const std::string &fname)
     double w;
     int maxv = -1;
 
-    std::vector<std::tuple<int,int,double>> edges;
-    std::string line;
+    vector<tuple<int,int,double>> edges;
+    string line;
     bool is_dimacs = false;
 
-    while(std::getline(in, line)){
+    while(getline(in, line)){
         if(line.empty()) continue;
 
         // Skip comments / headers
         if(line[0] == '#' || line[0] == '%' || line[0] == 'c' || line[0] == 'p')
             continue;
 
-        std::istringstream ss(line);
+        istringstream ss(line);
 
         if(line[0] == 'a'){
             // DIMACS arc line: "a u v w"
@@ -71,17 +72,17 @@ Graph Graph::load_edge_list(const std::string &fname)
         }
 
         edges.emplace_back(u, v, w);
-        maxv = std::max(maxv, std::max(u, v));
+        maxv = max(maxv, max(u, v));
     }
 
     G = Graph(maxv + 1);
     for(auto &e : edges){
-        std::tie(u, v, w) = e;
+        tie(u, v, w) = e;
         G.add_edge(u, v, w);
     }
 
     if(is_dimacs)
-        std::cerr << "DIMACS format detected, dedup applied\n";
+        cerr << "DIMACS format detected, dedup applied\n";
 
     return G;
 }
@@ -102,7 +103,7 @@ Graph constant_degree_transform(const Graph &G_orig)
     int n = G_orig.adj.size();
 
     // Map (vertex, neighbor-index) -> new node id
-    std::vector<std::vector<int>> map_to_new(n);
+    vector<vector<int>> map_to_new(n);
     int new_id = 0;
     for(int v = 0; v < n; ++v){
         int deg = G_orig.adj[v].size();
@@ -157,8 +158,8 @@ Graph constant_degree_transform(const Graph &G_orig)
 void check_connectivity(const Graph &G, int source)
 {
     int n = G.adj.size();
-    std::vector<bool> visited(n, false);
-    std::queue<int> q;
+    vector<bool> visited(n, false);
+    queue<int> q;
 
     visited[source] = true;
     q.push(source);
@@ -175,9 +176,9 @@ void check_connectivity(const Graph &G, int source)
         }
     }
 
-    std::cerr << "Connectivity: " << reachable << "/" << n
+    cerr << "Connectivity: " << reachable << "/" << n
               << " reachable from source " << source << "\n";
 
     if(reachable < n)
-        std::cerr << "WARNING: Graph is NOT fully connected!\n";
+        cerr << "WARNING: Graph is NOT fully connected!\n";
 }
